@@ -1,55 +1,39 @@
-/**
- * handlers/captcha.js
- * Basic captcha flow (math-based, extendable)
- */
-
 const bot = global.bot;
+const { generateCaptcha } = require('../utils/captchaEngine');
+const { blockUser } = require('../database/blocks');
 
-// In-memory captcha state
-const captchaState = new Map();
+const state = new Map();
 
-// Generate math captcha
-function generateCaptcha() {
-  const a = Math.floor(Math.random() * 10) + 1;
-  const b = Math.floor(Math.random() * 10) + 1;
-  return {
-    question: `${a} + ${b} = ?`,
-    answer: a + b
-  };
-}
-
-// Ask captcha
 global.askCaptcha = async (chatId, userId) => {
   const c = generateCaptcha();
-  captchaState.set(userId, c.answer);
+  state.set(userId, { ans: c.a, tries: 0 });
 
-  await bot.sendMessage(
-    chatId,
-    `🔐 **Verification Required**\n\nSolve this captcha:\n\n🧮 ${c.question}`,
-    { parse_mode: 'Markdown' }
-  );
+  bot.sendMessage(chatId, `🔐 Verification\n\n${c.q}`);
 };
 
-// Listen for captcha answers
-bot.on('message', async (msg) => {
+bot.on('message', async msg => {
   if (!msg.text) return;
-
   const userId = msg.from.id;
-  if (!captchaState.has(userId)) return;
+  if (!state.has(userId)) return;
 
-  const correct = captchaState.get(userId);
-  const userAnswer = parseInt(msg.text.trim(), 10);
+  const s = state.get(userId);
 
-  if (userAnswer === correct) {
-    captchaState.delete(userId);
-    await bot.sendMessage(msg.chat.id, "✅ Captcha solved successfully!");
-    if (typeof global.showMainMenu === 'function') {
-      global.showMainMenu(msg.chat.id);
-    }
-  } else {
-    await bot.sendMessage(
-      msg.chat.id,
-      "❌ Wrong answer. Try again."
-    );
+  if (msg.text.trim() === s.ans) {
+    state.delete(userId);
+    bot.sendMessage(msg.chat.id, "✅ Verified");
+    return global.showMainMenu(msg.chat.id);
   }
+
+  s.tries++;
+  if (s.tries >= 3) {
+    state.delete(userId);
+    await blockUser({
+      userId,
+      reason: "Captcha failed",
+      expireAt: new Date(Date.now()+10*60*1000).toISOString()
+    });
+    return bot.sendMessage(msg.chat.id, "⛔ Temporarily blocked (10 min)");
+  }
+
+  bot.sendMessage(msg.chat.id, "❌ Wrong, try again");
 });
