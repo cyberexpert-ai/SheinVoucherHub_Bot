@@ -8,14 +8,14 @@ exports.start = async (bot, msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
 
-  // 🧹 delete old bot message
+  // 🧹 delete old bot message (if exists)
   if (lastBotMessage.has(userId)) {
     try {
       await bot.deleteMessage(chatId, lastBotMessage.get(userId));
     } catch (e) {}
   }
 
-  // verified + welcomed → direct menu
+  // ✅ VERIFIED + WELCOMED → DIRECT MENU
   if (verifiedUsers.has(userId) && welcomedUsers.has(userId)) {
     const sent = await bot.sendMessage(chatId, "🏠 Menu", {
       reply_markup: {
@@ -31,7 +31,7 @@ exports.start = async (bot, msg) => {
     return;
   }
 
-  // 🚨 NOT VERIFIED → SHOW JOIN MESSAGE
+  // 🚨 ALWAYS SHOW JOIN MESSAGE IF NOT VERIFIED
   const sent = await bot.sendMessage(
     chatId,
 `👋 Welcome to Shein Codes Bot
@@ -40,10 +40,10 @@ exports.start = async (bot, msg) => {
 
 After joining, tap verify ✅
 
-Official channel:
+📢 Official channel
 https://t.me/SheinVoucherHub
 
-Order alert:
+🔔 Order alert
 https://t.me/OrdersNotify`,
     {
       reply_markup: {
