@@ -1,7 +1,12 @@
-module.exports = async function isJoined(bot, userId, channel) {
+module.exports = async (bot, userId, channels = []) => {
   try {
-    const res = await bot.getChatMember(channel, userId);
-    return ["member", "administrator", "creator"].includes(res.status);
+    for (const channel of channels) {
+      const member = await bot.getChatMember(channel, userId);
+      if (!["member", "administrator", "creator"].includes(member.status)) {
+        return false;
+      }
+    }
+    return true;
   } catch (e) {
     return false;
   }
