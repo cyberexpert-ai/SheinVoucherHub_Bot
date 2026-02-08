@@ -1,7 +1,9 @@
 const TelegramBot = require("node-telegram-bot-api");
 const config = require("./config/config");
-const handleAdmin = require("./handlers/admin");
-const handleUser = require("./handlers/user");
+
+const userHandler = require("./handlers/user");
+const verifyHandler = require("./handlers/verify");
+const adminHandler = require("./handlers/admin");
 
 const bot = new TelegramBot(config.BOT_TOKEN, { polling: true });
 
@@ -9,12 +11,19 @@ console.log("🤖 Bot started");
 
 // /start
 bot.onText(/\/start/, (msg) => {
-  handleUser.start(bot, msg);
+  userHandler.start(bot, msg);
 });
 
-// /admin (NO restriction, NO captcha, NO join check)
+// admin
 bot.onText(/\/admin/, (msg) => {
-  handleAdmin.panel(bot, msg);
+  adminHandler.panel(bot, msg);
+});
+
+// verify button
+bot.on("callback_query", (query) => {
+  if (query.data === "verify_join") {
+    verifyHandler.verify(bot, query);
+  }
 });
 
 // fallback
