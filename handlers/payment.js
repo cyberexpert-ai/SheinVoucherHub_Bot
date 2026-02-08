@@ -1,104 +1,61 @@
-/**
- * handlers/payment.js
- * Payment proof (screenshot + UTR) handling
- */
-
 const bot = global.bot;
-const { createOrder } = require('../database/orders');
-const { reduceStock } = require('../database/categories');
-const { isBlocked } = require('../database/blocks');
 const crypto = require('crypto');
 
-// Temp payment state
+const { createOrder } = require('../database/orders');
+const { reduceStock } = require('../database/categories');
+const { addRisk } = require('../database/users');
+const { blockUser } = require('../database/blocks');
+const { isUtrUsed, isScreenshotUsed, hashScreenshot } = require('../utils/antiFraud');
+
 const payState = new Map();
 
-// Helper: generate order id
-function generateOrderId() {
-  const d = new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-  const rand = crypto.randomBytes(3).toString('hex').toUpperCase();
-  return `SVH-${ymd}-${rand}`;
+function genOrderId() {
+  return `SVH-${Date.now().toString(36).toUpperCase()}`;
 }
 
-// Start payment (called after buy summary)
-global.startPayment = async (chatId, userId, state) => {
-  if (await isBlocked(userId)) {
-    return bot.sendMessage(chatId, "⛔ You are blocked. Contact support.");
-  }
-
-  payState.set(userId, state);
-
-  await bot.sendPhoto(
-    chatId,
-    'https://i.supaimg.com/00332ad4-8aa7-408f-8705-55dbc91ea737.jpg',
-    {
-      caption:
-        `💳 **Payment Required**\n\n` +
-        `🎟 Voucher: ₹${state.faceValue}\n` +
-        `📦 Quantity: ${state.qty}\n` +
-        `💰 Amount: ₹${state.total}\n\n` +
-        `After payment, send **Screenshot** then **UTR (12 digits)**.`,
-      parse_mode: 'Markdown'
-    }
-  );
-};
-
-// Receive screenshot
-bot.on('message', async (msg) => {
+bot.on('message', async msg => {
   const userId = msg.from.id;
   if (!payState.has(userId)) return;
+  const st = payState.get(userId);
 
-  const state = payState.get(userId);
-
-  // Expect screenshot first
-  if (!state.screenshot && msg.photo) {
-    state.screenshot = msg.photo[msg.photo.length - 1].file_id;
-    payState.set(userId, state);
-    return bot.sendMessage(msg.chat.id, "✅ Screenshot received. Now send **UTR number**.");
+  if (!st.ss && msg.photo) {
+    const fid = msg.photo.at(-1).file_id;
+    if (await isScreenshotUsed(fid)) {
+      await addRisk(userId, 3);
+      await blockUser({ userId, reason: "Screenshot reuse" });
+      payState.delete(userId);
+      return bot.sendMessage(msg.chat.id, "⛔ Fraud detected");
+    }
+    st.ss = fid;
+    st.hash = hashScreenshot(fid);
+    return bot.sendMessage(msg.chat.id, "Send UTR");
   }
 
-  // Expect UTR next
-  if (state.screenshot && msg.text) {
+  if (st.ss && msg.text) {
     const utr = msg.text.trim();
-    if (!/^\d{12}$/.test(utr)) {
-      return bot.sendMessage(msg.chat.id, "❌ Invalid UTR. Enter 12 digit number.");
+    if (await isUtrUsed(utr)) {
+      await addRisk(userId, 3);
+      await blockUser({ userId, reason: "UTR reuse" });
+      payState.delete(userId);
+      return bot.sendMessage(msg.chat.id, "⛔ Fraud detected");
     }
 
-    // Create order
-    const orderId = generateOrderId();
+    const orderId = genOrderId();
 
     await createOrder({
       orderId,
       userId,
       username: msg.from.username || '',
-      category: state.categoryId,
-      quantity: state.qty,
-      amount: state.total,
+      category: st.category,
+      quantity: st.qty,
+      amount: st.total,
       utr,
-      status: 'Pending'
+      ScreenshotHash: st.hash
     });
 
-    // Lock stock (reduce)
-    await reduceStock(state.categoryId, state.qty);
+    await reduceStock(st.category, st.qty);
 
-    // Notify admin
-    await bot.sendPhoto(global.ADMIN_ID, state.screenshot, {
-      caption:
-        `🎯 **New Order Submitted**\n\n` +
-        `🧾 Order ID: ${orderId}\n` +
-        `👤 User: ${msg.from.first_name} (${userId})\n` +
-        `📦 Qty: ${state.qty}\n` +
-        `💰 Amount: ₹${state.total}\n` +
-        `💳 UTR: ${utr}`,
-      parse_mode: 'Markdown'
-    });
-
+    bot.sendMessage(msg.chat.id, `✅ Order submitted\n${orderId}`);
     payState.delete(userId);
-
-    return bot.sendMessage(
-      msg.chat.id,
-      `✅ **Order Submitted Successfully!**\n\n🧾 Order ID:\n\`${orderId}\`\n\nStatus: *Pending Approval*`,
-      { parse_mode: 'Markdown' }
-    );
   }
 });
