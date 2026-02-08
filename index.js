@@ -1,52 +1,25 @@
-/**
- * SheinVoucherHub_Bot
- * Main Entry
- */
+const TelegramBot = require("node-telegram-bot-api");
+const config = require("./config/config");
+const handleAdmin = require("./handlers/admin");
+const handleUser = require("./handlers/user");
 
-require('dotenv').config();
-const TelegramBot = require('node-telegram-bot-api');
+const bot = new TelegramBot(config.BOT_TOKEN, { polling: true });
 
-// ENV
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const ADMIN_ID = Number(process.env.ADMIN_ID);
+console.log("🤖 Bot started");
 
-if (!BOT_TOKEN) {
-  console.error("BOT_TOKEN missing");
-  process.exit(1);
-}
+// /start
+bot.onText(/\/start/, (msg) => {
+  handleUser.start(bot, msg);
+});
 
-// BOT
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// /admin (NO restriction, NO captcha, NO join check)
+bot.onText(/\/admin/, (msg) => {
+  handleAdmin.panel(bot, msg);
+});
 
-global.bot = bot;
-global.ADMIN_ID = ADMIN_ID;
-
-// HANDLERS
-require('./handlers/start');
-require('./handlers/menu');
-require('./handlers/captcha');
-require('./handlers/buy');
-require('./handlers/payment');
-require('./handlers/orders');
-require('./handlers/recover');
-require('./handlers/support');
-require('./handlers/fallback');
-
-// ADMIN
-require('./admin/panel');
-require('./admin/orders');
-require('./admin/discounts');
-require('./admin/broadcast');
-require('./admin/reports');
-require('./admin/system');
-require('./admin/stock');
-
-// CRON JOBS
-require('./cron/orderExpiry');
-require('./cron/tempUnblock');
-require('./cron/couponExpiry');
-require('./cron/stockAlert');
-require('./cron/dailyReport');
-
-bot.on('polling_error', err => console.log(err.message));
-console.log("🤖 SheinVoucherHub_Bot started");
+// fallback
+bot.on("message", (msg) => {
+  if (!msg.text.startsWith("/")) {
+    bot.sendMessage(msg.chat.id, "❓ Please use the menu buttons.");
+  }
+});
