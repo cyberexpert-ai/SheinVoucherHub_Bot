@@ -1,48 +1,35 @@
-/**
- * handlers/start.js
- * /start command + channel join gate
- */
-
 const bot = global.bot;
-const ADMIN_ID = global.ADMIN_ID;
 
-// Channels (user must join both)
-const REQUIRED_CHANNELS = [
+const CHANNELS = [
   { username: '@SheinVoucherHub', url: 'https://t.me/SheinVoucherHub' },
   { username: '@OrdersNotify', url: 'https://t.me/OrdersNotify' }
 ];
 
-// Helper: check if user joined all channels
-async function hasJoinedAll(userId) {
-  for (const ch of REQUIRED_CHANNELS) {
+async function joinedAll(userId) {
+  for (const c of CHANNELS) {
     try {
-      const m = await bot.getChatMember(ch.username, userId);
-      if (!['member', 'administrator', 'creator'].includes(m.status)) {
-        return false;
-      }
-    } catch (e) {
-      return false; // bot not admin / error → treat as not joined
+      const m = await bot.getChatMember(c.username, userId);
+      if (!['member','administrator','creator'].includes(m.status)) return false;
+    } catch {
+      return false;
     }
   }
   return true;
 }
 
-// /start
-bot.onText(/\/start/, async (msg) => {
+bot.onText(/\/start/, async msg => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
 
-  // Join gate
-  const joined = await hasJoinedAll(userId);
-  if (!joined) {
+  const ok = await joinedAll(userId);
+  if (!ok) {
     return bot.sendMessage(
       chatId,
-      "👋 **Welcome to Shein Voucher Hub**\n\n🔒 To continue, join both channels:",
+      "🔒 Join both channels to continue",
       {
-        parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            REQUIRED_CHANNELS.map(c => ({ text: `Join ${c.username}`, url: c.url })),
+            CHANNELS.map(c => ({ text: `Join ${c.username}`, url: c.url })),
             [{ text: "✅ I've Joined", callback_data: 'verify_join' }]
           ]
         }
@@ -50,24 +37,20 @@ bot.onText(/\/start/, async (msg) => {
     );
   }
 
-  // If already joined → go menu
-  return bot.sendMessage(chatId, "✅ Verified! Opening main menu…");
+  return global.askCaptcha(chatId, userId);
 });
 
-// Verify join button
-bot.on('callback_query', async (q) => {
+bot.on('callback_query', async q => {
   if (q.data !== 'verify_join') return;
-  const chatId = q.message.chat.id;
-  const userId = q.from.id;
 
-  const joined = await hasJoinedAll(userId);
-  if (!joined) {
+  const ok = await joinedAll(q.from.id);
+  if (!ok) {
     return bot.answerCallbackQuery(q.id, {
-      text: '❌ Please join both channels first',
+      text: "Join both channels first",
       show_alert: true
     });
   }
 
   bot.answerCallbackQuery(q.id);
-  return bot.sendMessage(chatId, "✅ Verification successful! Use the menu below.");
+  return global.askCaptcha(q.message.chat.id, q.from.id);
 });
