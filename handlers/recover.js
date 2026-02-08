@@ -1,60 +1,29 @@
-/**
- * handlers/recover.js
- * Recover vouchers by Order ID
- */
-
 const bot = global.bot;
 const { getOrder } = require('../database/orders');
-const { isBlocked } = require('../database/blocks');
+const { createTicket } = require('../database/recoveryTickets');
 
-// Temp recover state
-const recoverState = new Map();
+const SLA = 2;
+const wait = new Map();
 
-bot.on('message', async (msg) => {
-  if (!msg.text) return;
-
-  // Entry point
+bot.on('message', async msg => {
   if (msg.text === '🔁 Recover Vouchers') {
-    if (await isBlocked(msg.from.id)) {
-      return bot.sendMessage(msg.chat.id, "⛔ You are blocked. Contact support.");
-    }
-
-    recoverState.set(msg.from.id, true);
-    return bot.sendMessage(
-      msg.chat.id,
-      "🔁 **Recover Vouchers**\n\nSend your Order ID\nExample:\n`SVH-20260130-ABC123`",
-      { parse_mode: 'Markdown' }
-    );
+    wait.set(msg.from.id, true);
+    return bot.sendMessage(msg.chat.id, "Send Order ID (2 hours valid)");
   }
 
-  // Waiting for Order ID
-  if (!recoverState.has(msg.from.id)) return;
+  if (!wait.has(msg.from.id)) return;
+  wait.delete(msg.from.id);
 
-  const orderId = msg.text.trim();
-  const order = await getOrder(orderId);
-
-  recoverState.delete(msg.from.id);
-
-  if (!order || order.UserID != msg.from.id.toString()) {
-    return bot.sendMessage(
-      msg.chat.id,
-      `⚠️ **Order not found**\n${orderId}`,
-      { parse_mode: 'Markdown' }
-    );
+  const order = await getOrder(msg.text.trim());
+  if (!order || order.UserID !== msg.from.id.toString()) {
+    return bot.sendMessage(msg.chat.id, "⚠️ Order not found");
   }
 
-  if (order.Status !== 'Successful') {
-    return bot.sendMessage(
-      msg.chat.id,
-      `⏳ Order status: *${order.Status}*\nPlease wait for admin approval.`,
-      { parse_mode: 'Markdown' }
-    );
+  const diff = (Date.now() - new Date(order.CreatedAt)) / 36e5;
+  if (diff > SLA) {
+    return bot.sendMessage(msg.chat.id, "⛔ Recovery expired");
   }
 
-  // Successful order → show codes
-  bot.sendMessage(
-    msg.chat.id,
-    `✅ **Recovered Successfully**\n\n🧾 Order ID:\n\`${order.OrderID}\`\n\n🎁 Codes:\n\`${order.VoucherCodes}\``,
-    { parse_mode: 'Markdown' }
-  );
+  const ticket = await createTicket(order.OrderID, msg.from.id);
+  bot.sendMessage(msg.chat.id, `🎫 Ticket created\n${ticket}`);
 });
