@@ -1,39 +1,38 @@
 const verifiedUsers = new Set();
 const welcomedUsers = new Set();
 
+// store last bot message id per user
+const lastBotMessage = new Map();
+
 exports.start = async (bot, msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
 
-  if (verifiedUsers.has(userId) && welcomedUsers.has(userId)) {
-    return showMenu(bot, chatId);
+  // 🔥 delete old bot message
+  if (lastBotMessage.has(userId)) {
+    try {
+      await bot.deleteMessage(chatId, lastBotMessage.get(userId));
+    } catch (e) {}
   }
 
+  // not verified → show join message
   if (!verifiedUsers.has(userId)) {
-    return bot.sendMessage(
+    const sent = await bot.sendMessage(
       chatId,
 `👋 Welcome to Shein Codes Bot
 
-📢 Please join required channels to continue.
+📢 Please join @SheinXCodes to continue.
 
-Mandatory:
-• @OrdersNotify
-• @SheinVoucherHub
+After joining, tap verify ✅
 
-Optional:
-• @SheinXCodes
+Official channel:
+https://t.me/SheinVoucherHub
 
-After joining mandatory channels, tap verify ✅`,
+Order alert:
+https://t.me/OrdersNotify`,
       {
         reply_markup: {
           inline_keyboard: [
-            [
-              { text: "🔊 Orders Notify", url: "https://t.me/OrdersNotify" },
-              { text: "🔊 Voucher Hub", url: "https://t.me/SheinVoucherHub" }
-            ],
-            [
-              { text: "➕ Extra Channel", url: "https://t.me/SheinXCodes" }
-            ],
             [
               { text: "✅ I've Joined — Verify", callback_data: "verify_join" }
             ]
@@ -41,9 +40,18 @@ After joining mandatory channels, tap verify ✅`,
         }
       }
     );
+
+    lastBotMessage.set(userId, sent.message_id);
+    return;
   }
 
-  showWelcome(bot, chatId, userId);
+  // verified but first welcome not shown
+  if (!welcomedUsers.has(userId)) {
+    return showWelcome(bot, chatId, userId);
+  }
+
+  // verified + welcomed → menu
+  showMenu(bot, chatId);
 };
 
 function showWelcome(bot, chatId, userId) {
@@ -80,6 +88,6 @@ function showMenu(bot, chatId) {
   });
 }
 
-exports.showMenu = showMenu;
 exports.showWelcome = showWelcome;
+exports.showMenu = showMenu;
 exports.verifiedUsers = verifiedUsers;
