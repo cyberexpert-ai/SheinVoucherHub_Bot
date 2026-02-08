@@ -1,17 +1,21 @@
 const isJoined = require("../utils/channelCheck");
-const { showMenu, verifiedUsers } = require("./user");
+const { showWelcome, verifiedUsers } = require("./user");
 
-const CHANNEL = "@SheinXCodes";
+// MUST JOIN CHANNELS
+const REQUIRED_CHANNELS = [
+  "@OrdersNotify",
+  "@SheinVoucherHub"
+];
 
 exports.verify = async (bot, query) => {
   const userId = query.from.id;
   const chatId = query.message.chat.id;
 
-  const joined = await isJoined(bot, userId, CHANNEL);
+  const joined = await isJoined(bot, userId, REQUIRED_CHANNELS);
 
   if (!joined) {
     return bot.answerCallbackQuery(query.id, {
-      text: "❌ You must join the channel first!",
+      text: "❌ Please join all mandatory channels first!",
       show_alert: true
     });
   }
@@ -22,5 +26,6 @@ exports.verify = async (bot, query) => {
     text: "✅ Verified successfully!"
   });
 
-  showMenu(bot, chatId);
+  // First time welcome
+  showWelcome(bot, chatId, userId);
 };
