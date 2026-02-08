@@ -1,0 +1,19 @@
+{
+  "name": "shein-voucher-hub-bot",
+  "version": "1.0.0",
+  "description": "Shein Voucher Hub Telegram Bot with admin panel, vouchers, discounts and automation",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.61.0",
+    "googleapis": "^130.0.0",
+    "dotenv": "^16.4.0",
+    "randomstring": "^1.2.3",
+    "node-cron": "^3.0.3"
+  }
+}
